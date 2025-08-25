@@ -1,0 +1,176 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binance Stablecoin Price Tracker</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        header {
+            background-color: #f0b90b;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+        }
+        main {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f0b90b;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        .error {
+            color: red;
+            text-align: center;
+            margin: 1rem 0;
+        }
+        footer {
+            text-align: center;
+            padding: 1rem;
+            background-color: #f0b90b;
+            color: white;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+        @media (max-width: 600px) {
+            header h1 {
+                font-size: 1.4rem;
+            }
+            th, td {
+                font-size: 0.9rem;
+                padding: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Binance Stablecoin Price Tracker (vs USDT)</h1>
+    </header>
+    <main>
+        <table>
+            <thead>
+                <tr>
+                    <th>Coin</th>
+                    <th>Price (USDT)</th>
+                    <th>Last Updated</th>
+                </tr>
+            </thead>
+            <tbody id="price-table">
+                <!-- Dynamic content will be inserted here -->
+            </tbody>
+        </table>
+        <p id="error-message" class="error" style="display: none;"></p>
+    </main>
+    <footer>
+        <p>Powered by <a href="https://www.binance.com" target="_blank" style="color: #fff;">Binance API</a></p>
+    </footer>
+    <script>
+        const coins = ['XUSDUSDT', 'FDUSDUSDT', 'USDCUSDT', 'EURIUSDT'];
+        const priceTable = document.getElementById('price-table');
+        const errorMessage = document.getElementById('error-message');
+
+        async function fetchPrices() {
+            priceTable.innerHTML = ''; // Clear table
+            errorMessage.style.display = 'none';
+
+            for (const coin of coins) {
+                try {
+                    const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${coin}`);
+                    const data = await response.json();
+
+                    if (data && data.price) {
+                        const price = parseFloat(data.price).toFixed(6);
+                        const row = document.createElement('tr');
+                        const coinName = coin.replace('USDT', '');
+                        const date = new Date().toLocaleTimeString();
+
+                        row.innerHTML = `
+                            <td>${coinName}</td>
+                            <td>${price}</td>
+                            <td>${date}</td>
+                        `;
+                        priceTable.appendChild(row);
+                    } else {
+                        throw new Error(`No price data for ${coin}`);
+                    }
+                } catch (error) {
+                    console.error(`Error fetching ${coin}:`, error);
+                    errorMessage.textContent = `Error fetching data for ${coin}. Please try again later.`;
+                    errorMessage.style.display = 'block';
+                }
+            }
+        }
+
+        // Fetch prices initially and every 10 seconds
+        fetchPrices();
+        setInterval(fetchPrices, 10000);
+    </script>
+</body>
+</html>

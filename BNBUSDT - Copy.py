@@ -7,8 +7,12 @@ import time
 from binance.um_futures import UMFutures
 from binance.client import Client
 import os
-
+import telepot
 # ============ Cấu hình đơn giản ============
+
+token = '6879315183:AAHOs0XQ5HtriBTf82hxNn6KrGWL6g3zJ00' # telegram token
+receiver_id = 685322834 # https://api.telegram.org/bot<TOKEN>/getUpdates
+bot = telepot.Bot(token)
 
 
 FEE_RATE = 0.0005     # 0.05% mở + 0.05% đóng (áp dụng trong ENV RL)
@@ -59,8 +63,8 @@ while True:
         client.futures_create_order(symbol=loaicoin, side = "SELL", type = "MARKET",quantity = soluong, positionSide="SHORT" )
         mucgiahientai = client.futures_symbol_ticker(symbol=loaicoin)
         mucgiahientai = round(float(mucgiahientai['price']),0)
-        mucgiastoplose = round((mucgiahientai + 5),0)
-        mucgiatakeprofit = round((mucgiahientai - 5),0)
+        mucgiastoplose = round((mucgiahientai + 8),0)
+        mucgiatakeprofit = round((mucgiahientai - 8),0)
         client.futures_create_order(symbol=loaicoin, side = "BUY", type = "STOP_MARKET", quantity = soluong,stopPrice = mucgiastoplose , positionSide="SHORT"  )
         client.futures_create_order(symbol=loaicoin, side = "BUY", type = "TAKE_PROFIT_MARKET", quantity = soluong,stopPrice = mucgiatakeprofit , positionSide="SHORT" )
         
@@ -70,8 +74,8 @@ while True:
         client.futures_create_order(symbol=loaicoin, side = "BUY", type = "MARKET",quantity = soluong, positionSide="LONG" )
         mucgiahientai = client.futures_symbol_ticker(symbol=loaicoin)
         mucgiahientai = round(float(mucgiahientai['price']),0)
-        mucgiastoplose = round((mucgiahientai - 5),0)
-        mucgiatakeprofit = round((mucgiahientai + 5),0)
+        mucgiastoplose = round((mucgiahientai - 8),0)
+        mucgiatakeprofit = round((mucgiahientai + 8),0)
         client.futures_create_order(symbol=loaicoin, side = "SELL", type = "STOP_MARKET", quantity = soluong,stopPrice = mucgiastoplose , positionSide="LONG"  )
         client.futures_create_order(symbol=loaicoin, side = "SELL", type = "TAKE_PROFIT_MARKET", quantity = soluong,stopPrice = mucgiatakeprofit , positionSide="LONG" )
     def donglong (loaicoin,soluong):
@@ -220,38 +224,42 @@ while True:
     time.sleep(1)
 
     model.save("ppo_BB"  + ".zip")
+    model = PPO.load("ppo_BB.zip")
+
+    obs, _ = env.reset()
+    while True:
+        action, _states = model.predict(obs)
+        obs, rewards, dones, truncated, info = env.step(action)
+        if dones or truncated:
+            break
+
+    if action == 0:
+        hanhdong = "BUY"
+    elif action == 1:
+        hanhdong = "SELL"
+    else:
+        hanhdong = "HOLD"
+    print("--------")
+    print(hanhdong)
+    bot.sendMessage(receiver_id, "--------" + str(df["Close"].iloc[-1]))
+    bot.sendMessage(receiver_id, "hanhdong " + str(df["Close"].iloc[-1]))
+
+    print("--------")
+
+    print("supertrend_direction:" + str(df['supertrend_direction'].iloc[-1]))
+    print("xuhuongmacd :" +str(df['xuhuongmacd'].iloc[-1]))
+
+    vithedangmo = is_position_open("BNBUSDT")
+    print("vithedangmo :" +str(vithedangmo))
+    if  df['Close'].iloc[-1] - df['Open'].iloc[-1]  > 0 :
+        print("nen xanh")
+    if  df['Close'].iloc[-1] - df['Open'].iloc[-1]  < 0 :
+        print("nen do")
+    print(df['Close'].iloc[-1])
+
+    # Điều kiện vào lệnh của bạn (giữ nguyên), nhưng SL/TP đã chuyển sang ATR trong molong/moshort
     if env.balance > 1000 :
-        model = PPO.load("ppo_BB.zip")
 
-        obs, _ = env.reset()
-        while True:
-            action, _states = model.predict(obs)
-            obs, rewards, dones, truncated, info = env.step(action)
-            if dones or truncated:
-                break
-
-        if action == 0:
-            hanhdong = "BUY"
-        elif action == 1:
-            hanhdong = "SELL"
-        else:
-            hanhdong = "HOLD"
-        print("--------")
-        print(hanhdong)
-        print("--------")
-
-        print("supertrend_direction:" + str(df['supertrend_direction'].iloc[-1]))
-        print("xuhuongmacd :" +str(df['xuhuongmacd'].iloc[-1]))
-
-        vithedangmo = is_position_open("BNBUSDT")
-        print("vithedangmo :" +str(vithedangmo))
-        if  df['Close'].iloc[-1] - df['Open'].iloc[-1]  > 0 :
-            print("nen xanh")
-        if  df['Close'].iloc[-1] - df['Open'].iloc[-1]  < 0 :
-            print("nen do")
-        print(df['Close'].iloc[-1])
-
-        # Điều kiện vào lệnh của bạn (giữ nguyên), nhưng SL/TP đã chuyển sang ATR trong molong/moshort
         if   vithedangmo  == False and action == 0 and  (df['xuhuongmacd'].iloc[-1]) > 0  and df['Close'].iloc[-1] - df['Open'].iloc[-1]  > 0:
            
             try:
@@ -260,8 +268,22 @@ while True:
                 print("ko the xoa lenh")
     
             try:
-                molong("BNBUSDT",0.01)
+                molong("BNBUSDT",0.02)
+                bot.sendMessage(receiver_id, "molong " + str(df["Close"].iloc[-1]))
+
             except:
                 print("ko the mo long")
-    
+    if   vithedangmo  == True and action == 1  and  (df['xuhuongmacd'].iloc[-1]) < 0  and df['Close'].iloc[-1] - df['Open'].iloc[-1]  < 0: 
+       
+        try:
+            donglong ("BNBUSDT",0.02)
+            bot.sendMessage(receiver_id, "donglong " + str(df["Close"].iloc[-1]))
+
+        except:
+            print("ko the dong long")
+        try:
+            cancelallorder("BNBUSDT")
+        except:
+            print("ko the xoa lenh")
+
     time.sleep(300)

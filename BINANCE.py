@@ -241,8 +241,8 @@ while True:
         hanhdong = "HOLD"
     print("--------")
     print(hanhdong)
-    bot.sendMessage(receiver_id, "--------" + str(df["Close"].iloc[-1]))
-    bot.sendMessage(receiver_id, "hanhdong " + str(df["Close"].iloc[-1]))
+    bot.sendMessage(receiver_id, "--------" )
+    bot.sendMessage(receiver_id, str(hanhdong))
 
     print("--------")
 
@@ -269,7 +269,7 @@ while True:
     
             try:
                 molong("BNBUSDT",0.02)
-                bot.sendMessage(receiver_id, "molong " + str(df["Close"].iloc[-1]))
+                bot.sendMessage(receiver_id, "molong " )
 
             except:
                 print("ko the mo long")
@@ -277,7 +277,7 @@ while True:
        
         try:
             donglong ("BNBUSDT",0.02)
-            bot.sendMessage(receiver_id, "donglong " + str(df["Close"].iloc[-1]))
+            bot.sendMessage(receiver_id, "donglong " )
 
         except:
             print("ko the dong long")

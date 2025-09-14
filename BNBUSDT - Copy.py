@@ -9,6 +9,8 @@ from binance.client import Client
 import os
 
 # ============ Cấu hình đơn giản ============
+
+
 FEE_RATE = 0.0005     # 0.05% mở + 0.05% đóng (áp dụng trong ENV RL)
 ATR_LEN = 14
 ATR_SL_MULT = 1.5     # SL = 1.5 * ATR (không thấp hơn min_sl_%)
@@ -16,23 +18,7 @@ RR_MULT = 2.0         # TP = RR_MULT * SL => R:R ≈ 1:2
 MIN_SL_PCT = 0.003    # SL tối thiểu 0.3% giá vào (tránh quá sát)
 TICK_ROUND_DEC = 1    # BNBUSDT tick ~ 0.1 -> làm tròn 1 chữ số
 
-# ============ Helper cho SL/TP ============
-def _round_price_bnB(x):
-    # BNBUSDT futures tick thường = 0.1 -> làm tròn 1 chữ số thập phân
-    return round(float(x), TICK_ROUND_DEC)
 
-def _get_atr_and_price(symbol, interval='5m', length=ATR_LEN, limit=120):
-    clientfutu = UMFutures()
-    candles = clientfutu.klines(symbol=symbol, interval=interval, limit=limit)
-    df = pd.DataFrame(candles, columns=[
-        "Time", "Open", "High", "Low", "Close", "Volume",
-        "CloseTime", "QuoteAssetVolume", "NumberOfTrades",
-        "TakerBuyBaseVolume", "TakerBuyQuoteVolume", "Ignore"
-    ])
-    df = df[["Time","Open","High","Low","Close"]].astype(float)
-    atr = ta.atr(high=df["High"], low=df["Low"], close=df["Close"], length=length).iloc[-1]
-    last_price = df["Close"].iloc[-1]
-    return float(last_price), float(atr)
 
 # ============ Chạy giữ nguyên cấu trúc code gốc ============
 while True:
@@ -51,75 +37,46 @@ while True:
         except Exception as e:
             print(f"Lỗi: {e}")
             return False
-
+    
+    
+    
     def cancelallorder (symbol):
+    
+        # Get all open futures orders
         open_orders = client.futures_get_open_orders(symbol=symbol)
+        
+        # Loop through open orders and cancel stop-loss and take-profit orders
         for order in open_orders:
+            # Check if the order is a stop-loss or take-profit order
             if order['type'] in ['STOP_MARKET', 'TAKE_PROFIT_MARKET']:
+                # Cancel the order
                 client.futures_cancel_order(symbol=symbol, orderId=order['orderId'])
                 print(f"Canceled order: {order['orderId']} ({order['type']})")
-
-    # ====== Đặt lệnh SHORT với SL/TP theo ATR (R:R ~ 1:2) ======
-    def moshort(loaicoin, soluong):
-        entry_price, atr = _get_atr_and_price(loaicoin, interval='5m', length=ATR_LEN, limit=120)
-        min_sl_dist = entry_price * MIN_SL_PCT
-        sl_dist = max(ATR_SL_MULT * atr, min_sl_dist)
-        tp_dist = RR_MULT * sl_dist
-
-        sl_price = _round_price_bnB(entry_price + sl_dist)  # short: SL trên
-        tp_price = _round_price_bnB(entry_price - tp_dist)  # short: TP dưới
-
-        # Mở short
-        client.futures_create_order(
-            symbol=loaicoin, side="SELL", type="MARKET", quantity=soluong, positionSide="SHORT"
-        )
-        # SL (reduceOnly để đóng vị thế)
-        client.futures_create_order(
-            symbol=loaicoin, side="BUY", type="STOP_MARKET",
-            stopPrice=sl_price, quantity=soluong, positionSide="SHORT",
-            reduceOnly=True
-        )
-        # TP (reduceOnly)
-        client.futures_create_order(
-            symbol=loaicoin, side="BUY", type="TAKE_PROFIT_MARKET",
-            stopPrice=tp_price, quantity=soluong, positionSide="SHORT",
-            reduceOnly=True
-        )
-        print(f"[SHORT] entry≈{_round_price_bnB(entry_price)} | SL={sl_price} | TP={tp_price} | ATR={round(atr,4)}")
-
+    
+    
+    
+    def moshort(loaicoin,soluong):
+        client.futures_create_order(symbol=loaicoin, side = "SELL", type = "MARKET",quantity = soluong, positionSide="SHORT" )
+        mucgiahientai = client.futures_symbol_ticker(symbol=loaicoin)
+        mucgiahientai = round(float(mucgiahientai['price']),0)
+        mucgiastoplose = round((mucgiahientai + 5),0)
+        mucgiatakeprofit = round((mucgiahientai - 5),0)
+        client.futures_create_order(symbol=loaicoin, side = "BUY", type = "STOP_MARKET", quantity = soluong,stopPrice = mucgiastoplose , positionSide="SHORT"  )
+        client.futures_create_order(symbol=loaicoin, side = "BUY", type = "TAKE_PROFIT_MARKET", quantity = soluong,stopPrice = mucgiatakeprofit , positionSide="SHORT" )
+        
     def dongshort (loaicoin,soluong):
-        client.futures_create_order(symbol=loaicoin, side="BUY", type="MARKET", quantity=soluong, positionSide="SHORT")
-
-    # ====== Đặt lệnh LONG với SL/TP theo ATR (R:R ~ 1:2) ======
-    def molong(loaicoin, soluong):
-        entry_price, atr = _get_atr_and_price(loaicoin, interval='5m', length=ATR_LEN, limit=120)
-        min_sl_dist = entry_price * MIN_SL_PCT
-        sl_dist = max(ATR_SL_MULT * atr, min_sl_dist)
-        tp_dist = RR_MULT * sl_dist
-
-        sl_price = _round_price_bnB(entry_price - sl_dist)  # long: SL dưới
-        tp_price = _round_price_bnB(entry_price + tp_dist)  # long: TP trên
-
-        # Mở long
-        client.futures_create_order(
-            symbol=loaicoin, side="BUY", type="MARKET", quantity=soluong, positionSide="LONG"
-        )
-        # SL (reduceOnly)
-        client.futures_create_order(
-            symbol=loaicoin, side="SELL", type="STOP_MARKET",
-            stopPrice=sl_price, quantity=soluong, positionSide="LONG",
-            reduceOnly=True
-        )
-        # TP (reduceOnly)
-        client.futures_create_order(
-            symbol=loaicoin, side="SELL", type="TAKE_PROFIT_MARKET",
-            stopPrice=tp_price, quantity=soluong, positionSide="LONG",
-            reduceOnly=True
-        )
-        print(f"[LONG] entry≈{_round_price_bnB(entry_price)} | SL={sl_price} | TP={tp_price} | ATR={round(atr,4)}")
-
+        client.futures_create_order(symbol=loaicoin, side = "BUY", type = "MARKET",quantity = soluong, positionSide="SHORT" )
+    def molong(loaicoin,soluong):
+        client.futures_create_order(symbol=loaicoin, side = "BUY", type = "MARKET",quantity = soluong, positionSide="LONG" )
+        mucgiahientai = client.futures_symbol_ticker(symbol=loaicoin)
+        mucgiahientai = round(float(mucgiahientai['price']),0)
+        mucgiastoplose = round((mucgiahientai - 5),0)
+        mucgiatakeprofit = round((mucgiahientai + 5),0)
+        client.futures_create_order(symbol=loaicoin, side = "SELL", type = "STOP_MARKET", quantity = soluong,stopPrice = mucgiastoplose , positionSide="LONG"  )
+        client.futures_create_order(symbol=loaicoin, side = "SELL", type = "TAKE_PROFIT_MARKET", quantity = soluong,stopPrice = mucgiatakeprofit , positionSide="LONG" )
     def donglong (loaicoin,soluong):
-        client.futures_create_order(symbol=loaicoin, side="SELL", type="MARKET", quantity=soluong, positionSide="LONG")
+        client.futures_create_order(symbol=loaicoin, side = "SELL", type = "MARKET",quantity = soluong, positionSide="LONG" )
+
 
     # =========================
     # PHẦN RL: thêm phí giao dịch (0.05% mở + 0.05% đóng)
@@ -295,16 +252,16 @@ while True:
         print(df['Close'].iloc[-1])
 
         # Điều kiện vào lệnh của bạn (giữ nguyên), nhưng SL/TP đã chuyển sang ATR trong molong/moshort
-        if   vithedangmo  == False and action == 0 and  (df['xuhuongmacd'].iloc[-1]) > 0 and    (df['supertrend_direction'].iloc[-1]) == 1 and df['Close'].iloc[-1] - df['Open'].iloc[-1]  > 0:
+        if   vithedangmo  == False and action == 0 and  (df['xuhuongmacd'].iloc[-1]) > 0  and df['Close'].iloc[-1] - df['Open'].iloc[-1]  > 0:
+           
             try:
                 cancelallorder("BNBUSDT")
             except:
                 print("ko the xoa lenh")
-
+    
             try:
-                # Mở LONG 0.01, SL/TP theo ATR
-                molong("BNBUSDT", 0.01)
-            except Exception as e:
-                print("ko the mo long:", e)
-
-    time.sleep(1800)
+                molong("BNBUSDT",0.01)
+            except:
+                print("ko the mo long")
+    
+    time.sleep(300)
